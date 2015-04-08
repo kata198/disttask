@@ -1,7 +1,10 @@
 disttask
 ========
 
-Python 2 compatible. 
+Disttask is a utility which provides the ability to distribute a task across a fixed number of processes, for better utilization of multiprocessing.
+It is both python 2 and python 3 compatible.
+
+Use it with existing single-threaded/process tools and scripts to take full advantage of your computer's resources.
 
 Provides the ability to distribute a task across a fixed number of processes, for better utilization of multiprocessing.
 
@@ -29,6 +32,9 @@ Example:
 
 Another Example:
 
+	Run pyflakes, using 10 simultanious processes, on all python files in subdirectories (requires shopt -s globstar. Notice the backticks, not single-quotes.)
 	Run php lint, using 10 simultanious processes, on all php files in subdirectories (requires shopt -s globstar)
 
 	./disttask "php -l %s" 10 `echo **/*.php`
+
+

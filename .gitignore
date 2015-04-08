@@ -5,3 +5,7 @@
 *.swo
 *.rej
 *.orig
+build/
+dist/
+*egg-info*
+MANIFEST
