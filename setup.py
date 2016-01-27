@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 from setuptools import setup
 
 long_description = """
@@ -34,10 +36,10 @@ Run pyflakes, using 10 simultanious processes, on all python files in subdirecto
 """
 
 setup(name='disttask',
-        version='1.1',
+        version='2.0.0',
         scripts=['disttask'],
-        keywords=['disttask', 'multiprocessing', 'distributed', 'concurrent', 'execution', 'command'],
-        description="Utility which provides the ability to distribute a task across a fixed number of processes, for better utilization of multiprocessing",
+        keywords=['disttask', 'multiprocessing', 'distributed', 'concurrent', 'execution', 'command', 'xargs', 'parallel', 'threading', 'pipes', 'task', 'management'],
+        description="Utility which distributes a task across a fixed number of processes, and collates the output, for better utilization of multiprocessing",
         long_description=long_description,
         license='GPLv3',
         author='Tim Savannah',

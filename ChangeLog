@@ -6,3 +6,8 @@ performance increase here.
 - Adjust timers to decrease sleep time
 - Add __version__ and __version_tuple__ to disttask
 - Support --help and --version
+- Use a deque for better performance
+- Support using "--" as the argset and reading items from stdin as alternative
+to providing all items as arguments
+
+* 1.0 - Sometime 2011?

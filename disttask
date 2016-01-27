@@ -102,14 +102,26 @@ class Runner(threading.Thread):
         self.stdoutWriter.addData(output)
 
 class DistTask(object):
-    def __init__(self, cmd, concurrent_tasks, argset, stdoutWriter):
+    def __init__(self, cmd, concurrent_tasks, argset, stdoutWriter, endWhenDone=True):
         self.cmd = cmd
         self.concurrent_tasks = concurrent_tasks
-        self.argset = argset
+        self.argset = deque(argset)
         self.stdoutWriter = stdoutWriter
+        self.endWhenDone = endWhenDone
+
+        if self.endWhenDone is False:
+            self.keepGoing = True
+
+        # keepGoing is an attribute when end
+
+    def addToArgset(self, items):
+        self.argset += items
+
+    def addItemToArgset(self, item):
+        self.argset.append(item)
 
     def run(self):
-        argset = self.argset[:] # Copy so we can modify
+        argset = self.argset
         for i in range(self.concurrent_tasks):
             pipes.append(None)
 
@@ -117,25 +129,30 @@ class DistTask(object):
 
         stdoutWriter = self.stdoutWriter
 
-        while pipesRunning != 0:
+        if self.endWhenDone is True:
+            shouldKeepGoing = lambda : bool(pipesRunning != 0)
+        else:
+            shouldKeepGoing = lambda : bool(self.keepGoing is True or (len(self.argset) != 0  or pipesRunning != 0))
+
+        while shouldKeepGoing():
             pipesRunning = 0
             for i in range(self.concurrent_tasks):
                 if pipes[i] == None:
                     if len(argset):
-                        cmd = self.cmd.replace('%s', argset[0]).replace('%d', str(i))
+                        nextItem = argset.popleft()
+                        cmd = self.cmd.replace('%s', nextItem).replace('%d', str(i))
                         pipes[i] = Runner(cmd, stdoutWriter)
                         pipes[i].start()
                         pipesRunning += 1
-                        del argset[0]
                 else:
                     if pipes[i].isAlive() == False:
                         if len(argset):
-                            cmd = self.cmd.replace('%s', argset[0]).replace('%d', str(i))
+                            nextItem = argset.popleft()
+                            cmd = self.cmd.replace('%s', nextItem).replace('%d', str(i))
                             pipes[i].join() # cleanup
                             pipes[i] = Runner(cmd, stdoutWriter)
                             pipes[i].start()
                             pipesRunning += 1
-                            del argset[0]
                     else:
                         pipesRunning += 1
 
@@ -146,7 +163,9 @@ class DistTask(object):
 if (__name__ == "__main__"):
     if len(sys.argv) < 4 or '--help' in sys.argv[1:3]:
         sys.stderr.write("Usage: " + sys.argv[0] + " [cmd] [concurrent tasks] [argset]\n\n")
-        sys.stderr.write("Use a %s in [cmd] where you want the args to go. use %d for the pipe number.\nTo run a list of commands, make '%s' be your full command.\n\nDisttask version " + __version__ + "\n")
+        sys.stderr.write("Use a %s in [cmd] where you want the args to go. use %d for the pipe number.\nTo run a list of commands, make '%s' be your full command.\n\n")
+        sys.stderr.write("If argset is '--', the items will be read from stdin instead of providing the arguments to disttask.\n  Execution will start immediately, so you can have disttask manage processing items that another program is feeding in.\n")
+        sys.stderr.write("\nDisttask version " + __version__ + "\n")
         sys.exit(1)
 
     if '--version' in sys.argv[1:3]:
@@ -163,10 +182,24 @@ if (__name__ == "__main__"):
         sys.exit(1)
     concurrent_tasks = int(sys.argv[2])
     argset = sys.argv[3:]
+
     stdoutWriter = StdoutWriter()
     stdoutWriter.start()
 
-    runner = DistTask(cmd, concurrent_tasks, argset, stdoutWriter)
-    runner.run()
+    if len(argset) == 1 and argset[0] == '--':
+        runner = DistTask(cmd, concurrent_tasks, [], stdoutWriter, endWhenDone=False)
+        runnerThread = threading.Thread(target=runner.run)
+        runnerThread.start()
+        nextItem = sys.stdin.readline()
+        sys.stdout.write('Got item: %s\n' %(nextItem,))
+        while nextItem:
+            runner.addItemToArgset(nextItem[:-1])
+            nextItem = sys.stdin.readline()
+            sys.stdout.write('Got item: %s\n' %(nextItem,))
+        runner.keepGoing = False
+        runnerThread.join()
+    else:
+        runner = DistTask(cmd, concurrent_tasks, argset, stdoutWriter, endWhenDone=True)
+        runner.run()
 
 # vim: set ts=4 sw=4 expandtab
