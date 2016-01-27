@@ -11,13 +11,19 @@ Provides the ability to distribute a task across a fixed number of processes, fo
 
 	Usage: ./disttask [cmd] [concurrent tasks] [argset]
 
+
 	Use a %s in [cmd] where you want the args to go. use %d for the pipe number.
+
 	To run a list of commands, make '%s' be your full command.
 
+
 	If argset is '--', the items will be read from stdin instead of providing the arguments to disttask.
+
 	  Execution will start immediately, so you can have disttask manage processing items that another program is feeding in.
 
+
 	Disttask version 2.0.0
+
 
 
 The application runs at most "concurrent task" number of processes (good to match total number of processors available to this number - 1).
@@ -36,14 +42,21 @@ Examples
 
 Use disttask to connect to various hosts in parallel and execute commands:
 
+
 	disttask "echo -n 'pipe %d: ' && ssh root@%s hostname" 2 "host1" "host2" "host3" "host4"
+
 	pipe 0: host1
+
 	pipe 1: host2
+
 	pipe 0: host3
+
 	pipe 1: host4
 
 
+
 Run pyflakes, using 10 simultaneous processes, on all python files in subdirectories (requires shopt -s globstar. Notice the backticks, not single-quotes.)
+
 
 	disttask "pyflakes %s" 10 `echo **/*.py`
 

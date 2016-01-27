@@ -9,5 +9,6 @@ performance increase here.
 - Use a deque for better performance
 - Support using "--" as the argset and reading items from stdin as alternative
 to providing all items as arguments
+- Cleanup READMEs somewhat
 
 * 1.0 - Sometime 2011?
