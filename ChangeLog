@@ -1,0 +1,8 @@
+* 2.0 - Jan 27 2016
+- Move stdout writing from a locked function within the context of the thread
+running subprocess to its own thread. This allows the next process to get
+started right away and not have to wait for the lock or stdout to flush. Good
+performance increase here.
+- Adjust timers to decrease sleep time
+- Add __version__ and __version_tuple__ to disttask
+- Support --help and --version

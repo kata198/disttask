@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-#Copyright (c) Timothy Savannah under GPLv3, All Rights Reserved. See LICENSE for more information
+# Copyright (c) 2011-2016 Timothy Savannah under GPLv3, All Rights Reserved. See LICENSE for more information
 """
 Disttask is a utility which provides the ability to distribute a task across a fixed number of processes, for better utilization of multiprocessing.
 
@@ -39,52 +39,74 @@ import subprocess
 import threading
 import time
 
-try:
-	bytes
-except:
-	bytes = str # Python < 2.6
-	
-if bytes == str:
-	# Python 2, no additional decoding necessary.
-	tostr = str
-else:
-	# Python 3, additional decoding necessary
-	try:
-		defaultEncoding = sys.getdefaultencoding()
-	except:
-		defaultEncoding = 'utf-8'
-	
-	def tostr(x):
-		if isinstance(x, bytes) is False:
-			return str(x)
-		return x.decode(defaultEncoding)
-		
+from collections import deque
 
-stdoutLock = threading.Lock()
-def write_stdout(txt):
-    stdoutLock.acquire()
-    sys.stdout.write(tostr(txt))
-    sys.stdout.flush()
-    time.sleep(.05)
-    stdoutLock.release()
+__version__ = '2.0.0'
+
+__version_tuple__ = (2, 0, 0)
+
+try:
+    bytes
+except:
+    bytes = str # Python < 2.6
+    
+if bytes == str:
+    # Python 2, no additional decoding necessary.
+    tostr = str
+else:
+    # Python 3, additional decoding necessary
+    try:
+        defaultEncoding = sys.getdefaultencoding()
+    except:
+        defaultEncoding = 'utf-8'
+    
+    def tostr(x):
+        if isinstance(x, bytes) is False:
+            return str(x)
+        return x.decode(defaultEncoding)
+        
+
+class StdoutWriter(threading.Thread):
+
+    def __init__(self, *args, **kwargs):
+        threading.Thread.__init__(self, *args, **kwargs)
+
+        self.stdoutData = deque()
+
+        self.keepGoing = True
+
+    def addData(self, data):
+        self.stdoutData.append(data)
+
+    def run(self):
+        time.sleep(.001) # Block immediatly whilst setup happens
+        stdoutData = self.stdoutData
+        while self.keepGoing is True:
+            while len(stdoutData) > 0:
+                nextItem = stdoutData.popleft()
+                sys.stdout.write(tostr(nextItem))
+                sys.stdout.flush()
+            time.sleep(.0005)
 
 class Runner(threading.Thread):
 
-    def __init__(self, cmd):
+    def __init__(self, cmd, stdoutWriter):
         threading.Thread.__init__(self)
         self.cmd = cmd
+        self.stdoutWriter = stdoutWriter
 
     def run(self):
         pipe = subprocess.Popen(self.cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
         output = pipe.stdout.read()
         pipe.wait()
-        write_stdout(output)
+        self.stdoutWriter.addData(output)
 
 class DistTask(object):
-    def __init__(self, cmd, concurrent_tasks, argset):
+    def __init__(self, cmd, concurrent_tasks, argset, stdoutWriter):
         self.cmd = cmd
         self.concurrent_tasks = concurrent_tasks
         self.argset = argset
+        self.stdoutWriter = stdoutWriter
 
     def run(self):
         argset = self.argset[:] # Copy so we can modify
@@ -93,13 +115,15 @@ class DistTask(object):
 
         pipesRunning = -1
 
+        stdoutWriter = self.stdoutWriter
+
         while pipesRunning != 0:
             pipesRunning = 0
             for i in range(self.concurrent_tasks):
                 if pipes[i] == None:
                     if len(argset):
                         cmd = self.cmd.replace('%s', argset[0]).replace('%d', str(i))
-                        pipes[i] = Runner(cmd)
+                        pipes[i] = Runner(cmd, stdoutWriter)
                         pipes[i].start()
                         pipesRunning += 1
                         del argset[0]
@@ -108,20 +132,26 @@ class DistTask(object):
                         if len(argset):
                             cmd = self.cmd.replace('%s', argset[0]).replace('%d', str(i))
                             pipes[i].join() # cleanup
-                            pipes[i] = Runner(cmd)
+                            pipes[i] = Runner(cmd, stdoutWriter)
                             pipes[i].start()
                             pipesRunning += 1
                             del argset[0]
                     else:
                         pipesRunning += 1
 
-            time.sleep(.002)
+            time.sleep(.0002)
+
+        stdoutWriter.keepGoing = False
 
 if (__name__ == "__main__"):
-    if len(sys.argv) < 4:
-        sys.stderr.write("Usage: " + sys.argv[0] + " [cmd] [concurrent tasks] [argset]\n")
-        sys.stderr.write("Use a %s in [cmd] where you want the args to go. use %d for the pipe number.\n")
+    if len(sys.argv) < 4 or '--help' in sys.argv[1:3]:
+        sys.stderr.write("Usage: " + sys.argv[0] + " [cmd] [concurrent tasks] [argset]\n\n")
+        sys.stderr.write("Use a %s in [cmd] where you want the args to go. use %d for the pipe number.\nTo run a list of commands, make '%s' be your full command.\n\nDisttask version " + __version__ + "\n")
         sys.exit(1)
+
+    if '--version' in sys.argv[1:3]:
+        sys.stderr.write('Disttask version %s\n' %(__version__,))
+        sys.exit(0)
 
 
     pipes = []
@@ -133,5 +163,10 @@ if (__name__ == "__main__"):
         sys.exit(1)
     concurrent_tasks = int(sys.argv[2])
     argset = sys.argv[3:]
-    runner = DistTask(cmd, concurrent_tasks, argset)
+    stdoutWriter = StdoutWriter()
+    stdoutWriter.start()
+
+    runner = DistTask(cmd, concurrent_tasks, argset, stdoutWriter)
     runner.run()
+
+# vim: set ts=4 sw=4 expandtab
