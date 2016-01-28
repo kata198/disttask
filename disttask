@@ -8,6 +8,7 @@ Use it with existing single-threaded/process tools and scripts to take full adva
 
 """
 
+import os
 import sys
 import subprocess
 import threading
@@ -15,9 +16,9 @@ import time
 
 from collections import deque
 
-__version__ = '2.0.0'
+__version__ = '2.0.1'
 
-__version_tuple__ = (2, 0, 0)
+__version_tuple__ = (2, 0, 1)
 
 try:
     bytes
@@ -135,16 +136,16 @@ class DistTask(object):
         stdoutWriter.keepGoing = False
 
 if (__name__ == "__main__"):
+    if '--version' in sys.argv[1:3]:
+        sys.stderr.write('Disttask version %s\n' %(__version__,))
+        sys.exit(0)
+
     if len(sys.argv) < 4 or '--help' in sys.argv[1:3]:
-        sys.stderr.write("Usage: " + sys.argv[0] + " [cmd] [concurrent tasks] [argset]\n\n")
+        sys.stderr.write("Usage: " + os.path.basename(sys.argv[0]) + " [cmd] [concurrent tasks] [argset]\n\n")
         sys.stderr.write("Use a %s in [cmd] where you want the args to go. use %d for the pipe number.\nTo run a list of commands, make '%s' be your full command.\n\n")
         sys.stderr.write("If argset is '--', the items will be read from stdin instead of providing the arguments to disttask.\n  Execution will start immediately, so you can have disttask manage processing items that another program is feeding in.\n")
         sys.stderr.write("\nDisttask version " + __version__ + "\n")
         sys.exit(1)
-
-    if '--version' in sys.argv[1:3]:
-        sys.stderr.write('Disttask version %s\n' %(__version__,))
-        sys.exit(0)
 
 
     pipes = []

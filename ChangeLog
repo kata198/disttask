@@ -1,6 +1,7 @@
 *2.0.1 - Jan 28 2016
 - Fix race condition where occasionally really quick jobs would run but not
 print the last job's result.
+- Fix --version not displaying version
 
 * 2.0.0 - Jan 27 2016
 - Move stdout writing from a locked function within the context of the thread
