@@ -1,4 +1,8 @@
-* 2.0 - Jan 27 2016
+*2.0.1 - Jan 28 2016
+- Fix race condition where occasionally really quick jobs would run but not
+print the last job's result.
+
+* 2.0.0 - Jan 27 2016
 - Move stdout writing from a locked function within the context of the thread
 running subprocess to its own thread. This allows the next process to get
 started right away and not have to wait for the lock or stdout to flush. Good

@@ -1,7 +1,7 @@
 disttask
 ========
 
-Disttask is a utility which provides the ability to distribute a task across a fixed number of processes, for better utilization of multiprocessing.
+Disttask is a utility which provides the ability to distribute a task across a fixed number of processes and collate the output, for better utilization of multiprocessing.
 
 Use it with existing single-threaded/process tools and scripts to take full advantage of your computer's resources.
 
