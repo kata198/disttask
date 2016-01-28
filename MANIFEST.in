@@ -1,0 +1,6 @@
+include Changelog
+include disttast
+include README.md
+include README.rst
+include LICENSE
+include setup.py
