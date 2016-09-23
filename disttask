@@ -207,7 +207,7 @@ if (__name__ == "__main__"):
         collateOutput = False
 
     if '--version' in args:
-        sys.stderr.write('Disttask version %s\n' %(__version__,))
+        sys.stderr.write('disttask version %s by Tim Savannah\n' %(__version__,))
         sys.exit(0)
 
     if len(args) < 3 or '--help' in args:
@@ -224,7 +224,7 @@ if (__name__ == "__main__"):
  Example:  disttask "ssh root@%s hostname" 3 host1 host2 host3 host4 host5 host6 # Connect and get hostname on 6 hosts, 3 at a time.
 ''')
 
-        sys.stderr.write("\nDisttask version " + __version__ + "\n")
+        sys.stderr.write("\ndisttask version " + __version__ + "\n")
         sys.exit(1)
 
 
