@@ -1,4 +1,10 @@
-*2.0.1 - Jan 28 2016
+* 2.1.0 - Sep 23 2016
+- Forgot to release this
+- Add "-nc" option for "no collate", where output will be given as soon as it is available, not upon task completion
+- Some better handling of strings
+- Flush stdout less often in no-collate case
+
+* 2.0.1 - Jan 28 2016
 - Fix race condition where occasionally really quick jobs would run but not
 print the last job's result.
 - Fix --version not displaying version
