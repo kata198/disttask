@@ -1,3 +1,9 @@
+* 2.1.1 - Sep 26 2016
+- better handle un-decodable output on python3
+- fix issue on python 3.5
+- minor performance inprovements. 
+- Terminate pipe if we hit a problem instead of hanging
+
 * 2.1.0 - Sep 23 2016
 - Forgot to release this
 - Add "-nc" option for "no collate", where output will be given as soon as it is available, not upon task completion
