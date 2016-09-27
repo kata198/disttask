@@ -43,7 +43,7 @@ else:
         if isinstance(x, bytes) is False:
             return str(x)
         return x.decode(defaultEncoding)
-       
+
 
 class StdoutWriter(threading.Thread):
 
@@ -69,11 +69,16 @@ class StdoutWriter(threading.Thread):
 
         flushEvery = self.FLUSH_EVERY
 
+        try:
+            writeOutput = sys.stdout.buffer.write
+        except:
+            writeOutput = sys.stdout.write
+
         while self.keepGoing is True or len(stdoutData) > 0:
             i = 0
             while len(stdoutData) > 0:
                 nextItem = stdoutData.popleft()
-                sys.stdout.write(tostr(nextItem))
+                writeOutput(nextItem)
                 i += 1
                 if i >= flushEvery:
                     i = 0
@@ -103,16 +108,22 @@ class Runner(threading.Thread):
         else:
             thisItem = self.thisItem
 
-            def handleLine(line):
-                self.stdoutWriter.addData('[%s] %s' %(thisItem, line))
+            if sys.version_info.major >= 3:
+                def handleLine(line):
+                    prefix = ('[%s] ' %(thisItem,)).encode(defaultEncoding)
+                    self.stdoutWriter.addData(prefix + line)
+            else:
+                def handleLine(line):
+                    self.stdoutWriter.addData('[%s] %s' %(thisItem, line))
 
+        pipeStdout = pipe.stdout
         i = 0
-        while self.keepGoing is True and (not pipe.stdout.closed or pipe.poll() is not None):
+        while self.keepGoing is True and (not pipeStdout.closed or pipe.poll() is not None):
             try:
-                (rlist, wlist, errors) = select.select([pipe.stdout], [], [pipe.stdout], .004)
+                (rlist, wlist, errors) = select.select([pipeStdout], [], [pipeStdout], .004)
                 if errors:
                     try:
-                        pipe.stdout.close()
+                        pipeStdout.close()
                     except:
                         pass
                     break
@@ -121,16 +132,24 @@ class Runner(threading.Thread):
                     time.sleep(.002)
                     continue
 
-                line = pipe.stdout.readline()
-                if line == '':
+                line = pipeStdout.readline()
+                    
+                if line == b'':
                     break
 
                 handleLine(line)
             except Exception as e:
+                keepGoing = False
+                pipe.terminate()
+                sys.stderr.write('Got exception: %s\n' %(str(e),))
                 break
         pipe.wait()
         if self.collateOutput is True:
-            self.stdoutWriter.addData(''.join(output))
+            try:
+                self.stdoutWriter.addData(''.join(output))
+            except:
+                for item in output:
+                    self.stdoutWriter.addData(item)
 
 class DistTask(object):
     def __init__(self, cmd, concurrent_tasks, argset, stdoutWriter, endWhenDone=True, collateOutput=True):
