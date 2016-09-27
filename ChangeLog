@@ -1,3 +1,9 @@
+* 2.2.0 - Sep 26 2016
+- Allow specifying "0" or "MAX" as the "concurrent tasks" parameter, to
+execute all items given on the commandline at once (so num jobs = num items
+provided).
+- Update help message to read better, update READMEs.
+
 * 2.1.1 - Sep 26 2016
 - better handle un-decodable output on python3
 - fix issue on python 3.5
