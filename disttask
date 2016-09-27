@@ -265,9 +265,6 @@ if (__name__ == "__main__"):
 
 
     cmd = args.pop(0)
-    if '%s' not in cmd:
-        sys.stderr.write("No %s in command!\n")
-        sys.exit(127)
 
     concurrent_tasks = args.pop(0)
     if concurrent_tasks.lower() == 'max':
