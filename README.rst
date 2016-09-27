@@ -16,6 +16,8 @@ Provides the ability to distribute a task across a fixed number of processes, fo
 
 	To run a list of commands (job server), have '%s' be your full command.
 
+	If you need a literal %s or %d, use %%s or %%d.
+
 
 
 		Options:

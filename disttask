@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+#  Runs in either python2 or python3, but is faster in python2.
 
 # Copyright (c) 2011-2016 Timothy Savannah under GPLv3, All Rights Reserved. See LICENSE for more information
 """
@@ -9,6 +10,7 @@ Use it with existing single-threaded/process tools and scripts to take full adva
 """
 
 import os
+import re
 import sys
 import select
 import signal
@@ -45,7 +47,93 @@ else:
         return x.decode(defaultEncoding)
 
 
+# Regex to find %s and %d, and takes in leading character.
+#  to match on a string, make sure to prepend with a throw-away character ' '
+#  to be able to match on first char.
+replaceReg = re.compile('(.[%][sd])')
+
+def replaceItem(cmd, item, pipeNum):
+    '''
+        replaceItem - Replace %s and %d with the item value and pipe num in the given command.
+
+            This method is complete, in that it supports NOT replacing %%s, but is slower than
+            replaceItemQuick. If '%%s' or '%%d' occurs in command, use this method, otherwise use replaceItemQuick
+
+        @param cmd <str> - Command given to disttask to fill-in
+        @param item <str> - Current argset item
+        @param pipeNum <int/str> - Current pipe number
+
+        @return <str> - substituted command
+    '''
+
+    pipeNum = str(pipeNum)
+
+    # Add space so regex works, and start with idx=1 (excluding leading space)
+    cmd = ' ' + cmd
+    ret = []
+    curI = 1
+
+    # For each match, append from command from last iter to match,
+    #   then replace item/pipe, and reset iter to after matched region.
+    for matchObj in replaceReg.finditer(cmd):
+
+        (matchStart, matchEnd) = matchObj.span()
+
+        # If the leading char was %, then we have matched %%s or %%d,
+        #  so replace %s or %d.
+        if cmd[matchStart] == '%':
+            ret.append( cmd[curI:matchStart] )
+            ret.append('%' + cmd[matchEnd-1])
+        else:
+            # Otherwise, if %s add item, else add pipenum.
+            #  And put back the matched first char (matchStart+1)
+            ret.append( cmd[curI:matchStart+1] )
+            if cmd[matchEnd-1] == 's':
+                ret.append(item)
+            else:
+                ret.append(pipeNum)
+        
+        curI = matchEnd
+
+    # Get remainder
+    ret.append(cmd[curI:])
+
+    return ''.join(ret)
+
+def replaceItemQuick(cmd, item, pipeNum):
+    '''
+        replaceItemQuick - Replace %s and %d with the item value and pipe num in the given command quickly
+
+            This does NOT support double-percent (%%), and if command contains it, should NOT be used.
+
+        @param cmd <str> - Command given to disttask to fill-in
+        @param item <str> - Current argset item
+        @param pipeNum <int/str> - Current pipe number
+
+        @return <str> - substituted command
+    '''
+
+    return cmd.replace('%s', item).replace('%d', str(pipeNum))
+
+def getReplaceItemMethod(cmd):
+    '''
+        getReplaceItemMethod - Picks the best "replace item" method for the given command.
+
+        @param cmd <str> - Command with %s/%d for subs
+
+        @return <function> - The replaceItem method to use to fill in cmd
+    '''
+    if '%%s' in cmd or '%%d' in cmd:
+        return replaceItem
+    else:
+        return replaceItemQuick
+
+
+
 class StdoutWriter(threading.Thread):
+    '''
+        StdoutWriter - The thread which writes data to stdout from the several subprocesses.
+    '''
 
     # FLUSH_EVERY - Explicitly flush after this many items.
     FLUSH_EVERY = 1
@@ -58,10 +146,19 @@ class StdoutWriter(threading.Thread):
         self.keepGoing = True
 
     def addData(self, data):
+        '''
+            addData - Use this method to add an item to print
+        '''
         self.stdoutData.append(data)
 
     def setFlushEvery(self, nWrites):
         self.FLUSH_EVERY = nWrites
+
+    def stopRunning(self):
+        '''
+            stopRunning - Stop executing "run" at next possible moment.
+        '''
+        self.keepGoing = False
 
     def run(self):
         time.sleep(.001) # Block immediatly whilst setup happens
@@ -69,6 +166,7 @@ class StdoutWriter(threading.Thread):
 
         flushEvery = self.FLUSH_EVERY
 
+        # In python3, we write bytes.
         try:
             writeOutput = sys.stdout.buffer.write
         except:
@@ -88,6 +186,9 @@ class StdoutWriter(threading.Thread):
             time.sleep(.0005)
 
 class Runner(threading.Thread):
+    '''
+        Runner - Thread running a subprocess
+    '''
 
     def __init__(self, cmd, stdoutWriter, thisItem, collateOutput=True):
         threading.Thread.__init__(self)
@@ -152,8 +253,32 @@ class Runner(threading.Thread):
                     self.stdoutWriter.addData(item)
 
 class DistTask(object):
+    '''
+        DistTask - Main class that manages running the tasks.
+
+            Can be run as a thread, or as a standalone.
+
+            As a thread, and when "endWhenDone=False", you can keep feeding in items (addToArgset, addItemToArgset)
+    '''
+
     def __init__(self, cmd, concurrent_tasks, argset, stdoutWriter, endWhenDone=True, collateOutput=True):
+        '''
+            Create object
+
+            @param cmd <str> - Command with "%s" for argset items and "%d" for pipe number
+            @param concurrent_tasks <int> - Number of tasks to run at once, or 0 to mean all items in argset at once
+            @param stdoutWriter <StdoutWriter> - Class to pass stdout output
+            @param endWhenDone <bool> Default True - If we should stop running when we have completed the argset.
+                If False, we will wait for more items.
+            @param collateOutput <bool> Default True - If True, output is only printed when an item completes its task.
+                Otherwise, every line is printed prefixed with the argset item name.
+        '''
+
         self.cmd = cmd
+
+        # Use the quicker method of replace if we don't need to support double-percent
+        self.replaceItem = getReplaceItemMethod(cmd)
+
         self.concurrent_tasks = concurrent_tasks or len(argset)
         self.argset = deque(argset)
         self.stdoutWriter = stdoutWriter
@@ -167,12 +292,38 @@ class DistTask(object):
         # keepGoing is an attribute when end
 
     def addToArgset(self, items):
+        '''
+            addToArgset - Add several items to argset (pending items)
+
+            @param items list<str> -  Several items
+        '''
         self.argset += items
 
     def addItemToArgset(self, item):
+        '''
+            addItemToArgset - Add a single item to argset (pending items)
+
+            @param item <str> - An item (%s sub)
+        '''
         self.argset.append(item)
 
+    def stopRunning(self):
+        '''
+            stopRunning - Stop executing "run" at next possible moment.
+        '''
+        self.keepGoing = False
+
     def run(self):
+        '''
+            run - Start executing. Will continue to read off "argset" until complete.
+
+                If endWhenDone=True on this object, after "argset" is empty, this will return.
+
+                Otherwise, it will run until "stopRunning" is called.
+
+                The StdoutWriter will be terminated at the end of this method.
+        '''
+
         argset = self.argset
         for i in range(self.concurrent_tasks):
             pipes.append(None)
@@ -194,7 +345,7 @@ class DistTask(object):
                 if pipes[i] is None:
                     if len(argset) > 0:
                         nextItem = argset.popleft()
-                        cmd = self.cmd.replace('%s', nextItem).replace('%d', str(i))
+                        cmd = self.replaceItem(self.cmd, nextItem, i)
                         pipes[i] = Runner(cmd, stdoutWriter, nextItem, collateOutput)
                         pipes[i].start()
                         pipesRunning += 1
@@ -202,7 +353,7 @@ class DistTask(object):
                     if pipes[i].isAlive() is False:
                         if len(argset) > 0:
                             nextItem = argset.popleft()
-                            cmd = self.cmd.replace('%s', nextItem).replace('%d', str(i))
+                            cmd = self.replaceItem(self.cmd, nextItem, i)
                             pipes[i].join() # cleanup
                             pipes[i] = Runner(cmd, stdoutWriter, nextItem, collateOutput)
                             pipes[i].start()
@@ -212,7 +363,7 @@ class DistTask(object):
 
             time.sleep(.0002)
 
-        stdoutWriter.keepGoing = False
+        stdoutWriter.stopRunning()
 
 if (__name__ == "__main__"):
     args = sys.argv[1:]
@@ -231,7 +382,7 @@ if (__name__ == "__main__"):
 
     if len(args) < 3 or '--help' in args:
         sys.stderr.write("Usage: " + os.path.basename(sys.argv[0]) + " [cmd] [concurrent tasks] [argset]\n\n")
-        sys.stderr.write("Use a %s in [cmd] where you want the args to go. use %d for the pipe number.\nTo run a list of commands (job server), have '%s' be your full command.\n\n")
+        sys.stderr.write("Use a %s in [cmd] where you want the args to go. use %d for the pipe number.\nTo run a list of commands (job server), have '%s' be your full command.\nIf you need a literal %s or %d, use %%s or %%d.\n\n")
         sys.stderr.write('''
     Options:
 
@@ -302,7 +453,7 @@ if (__name__ == "__main__"):
                 break
             runner.addItemToArgset(nextItem[:-1])
 
-        runner.keepGoing = False
+        runner.stopRunning()
         runnerThread.join()
     else:
         runner = DistTask(cmd, concurrent_tasks, argset, stdoutWriter, endWhenDone=True, collateOutput=collateOutput)

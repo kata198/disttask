@@ -13,6 +13,7 @@ Provides the ability to distribute a task across a fixed number of processes, fo
 
 	Use a %s in [cmd] where you want the args to go. use %d for the pipe number.
 	To run a list of commands (job server), have '%s' be your full command.
+	If you need a literal %s or %d, use %%s or %%d.
 
 
 		Options:
