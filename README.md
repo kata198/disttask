@@ -12,10 +12,8 @@ Provides the ability to distribute a task across a fixed number of processes, fo
 	Usage: disttask [cmd] [concurrent tasks] [argset]
 
 	Use a %s in [cmd] where you want the args to go. use %d for the pipe number.
-	To run a list of commands, make '%s' be your full command.
+	To run a list of commands (job server), have '%s' be your full command.
 
-	If argset is '--', the items will be read from stdin instead of providing the arguments to disttask.
-		Execution will start immediately, so you can have disttask manage processing items that another program is feeding in.
 
 		Options:
 
@@ -23,9 +21,25 @@ Provides the ability to distribute a task across a fixed number of processes, fo
 										   By providing "-nc" or "--no-collate", instead each line that comes in from any running task
 										   is printed, prefixed with the argset in square-brackets (e.x.  "[arg1] Some message"
 
-		Example:  disttask "ssh root@%s hostname" 3 host1 host2 host3 host4 host5 host6 # Connect and get hostname on 6 hosts, 3 at a time.
 
-	disttask version 2.1.0
+		Argsets from stdin
+
+			If argset is '--', then the argset items will be read from stdin instead of being provided on the commandline.
+			Execution begins immediately, so you can use disttask as a job manager with another process feeding in items
+			as they become available.
+
+
+		Max Concurrency
+
+			You may use "0" or "MAX" as the "concurrent tasks" parameter to execute all items in the argset simultaneously
+
+
+		Example Usage
+
+			disttask "ssh root@%s hostname" 3 host1 host2 host3 host4 host5 host6 # Connect and get hostname on 6 hosts, 3 at a time.
+
+	disttask version 2.2.0
+
 
 
 **Concurrency**

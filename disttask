@@ -154,7 +154,7 @@ class Runner(threading.Thread):
 class DistTask(object):
     def __init__(self, cmd, concurrent_tasks, argset, stdoutWriter, endWhenDone=True, collateOutput=True):
         self.cmd = cmd
-        self.concurrent_tasks = concurrent_tasks
+        self.concurrent_tasks = concurrent_tasks or len(argset)
         self.argset = deque(argset)
         self.stdoutWriter = stdoutWriter
         self.endWhenDone = endWhenDone
@@ -231,8 +231,7 @@ if (__name__ == "__main__"):
 
     if len(args) < 3 or '--help' in args:
         sys.stderr.write("Usage: " + os.path.basename(sys.argv[0]) + " [cmd] [concurrent tasks] [argset]\n\n")
-        sys.stderr.write("Use a %s in [cmd] where you want the args to go. use %d for the pipe number.\nTo run a list of commands, make '%s' be your full command.\n\n")
-        sys.stderr.write("If argset is '--', the items will be read from stdin instead of providing the arguments to disttask.\n  Execution will start immediately, so you can have disttask manage processing items that another program is feeding in.\n")
+        sys.stderr.write("Use a %s in [cmd] where you want the args to go. use %d for the pipe number.\nTo run a list of commands (job server), have '%s' be your full command.\n\n")
         sys.stderr.write('''
     Options:
 
@@ -240,7 +239,22 @@ if (__name__ == "__main__"):
                                        By providing "-nc" or "--no-collate", instead each line that comes in from any running task
                                        is printed, prefixed with the argset in square-brackets (e.x.  "[arg1] Some message"
 
- Example:  disttask "ssh root@%s hostname" 3 host1 host2 host3 host4 host5 host6 # Connect and get hostname on 6 hosts, 3 at a time.
+
+   Argsets from stdin
+
+      If argset is '--', then the argset items will be read from stdin instead of being provided on the commandline.
+      Execution begins immediately, so you can use disttask as a job manager with another process feeding in items
+      as they become available.
+
+
+   Max Concurrency
+
+      You may use "0" or "MAX" as the "concurrent tasks" parameter to execute all items in the argset simultaneously
+
+
+   Example Usage
+
+      disttask "ssh root@%s hostname" 3 host1 host2 host3 host4 host5 host6 # Connect and get hostname on 6 hosts, 3 at a time.
 ''')
 
         sys.stderr.write("\ndisttask version " + __version__ + "\n")
@@ -251,18 +265,24 @@ if (__name__ == "__main__"):
 
 
     cmd = args.pop(0)
-    if cmd.find('%s') == -1:
+    if '%s' not in cmd:
         sys.stderr.write("No %s in command!\n")
-        sys.exit(1)
+        sys.exit(127)
 
     concurrent_tasks = args.pop(0)
-    if concurrent_tasks.isdigit() is False:
+    if concurrent_tasks.lower() == 'max':
+        concurrent_tasks = 0
+
+    elif concurrent_tasks.isdigit() is False:
         sys.stderr.write('Number of concurrent tasks must be an integer, not "%s"\n' %(concurrent_tasks, ))
-        sys.exit(1)
+        sys.exit(127)
 
     concurrent_tasks = int(concurrent_tasks)
     argset = args
  
+    if len(argset) == 1 and argset[0] == '--' and concurrent_tasks == 0:
+        sys.stderr.write('concurrent tasks = 0 (MAX) is not supported with input from stdin.\n')
+        sys.exit(127)
 
     stdoutWriter = StdoutWriter()
     if collateOutput is False:
@@ -270,6 +290,7 @@ if (__name__ == "__main__"):
     stdoutWriter.start()
 
     if len(argset) == 1 and argset[0] == '--':
+
         runner = DistTask(cmd, concurrent_tasks, [], stdoutWriter, endWhenDone=False, collateOutput=collateOutput)
         runnerThread = threading.Thread(target=runner.run)
         runnerThread.start()
