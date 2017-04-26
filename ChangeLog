@@ -1,3 +1,6 @@
+* 2.2.2 - Apr 25 2017
+- Fix a race condition on some tasks that print an empty string as output
+
 * 2.2.1 - Sep 27 2016
 - Support literal "%s" and "%d" by using "%%s" or "%%d". Double-percents elsewhere will actually mean double-percent.
 - Add docstrings, cleanups.
