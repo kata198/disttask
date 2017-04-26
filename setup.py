@@ -14,7 +14,7 @@ if __name__ == '__main__':
         long_description = summary
 
     setup(name='disttask',
-            version='2.2.1',
+            version='2.2.2',
             scripts=['disttask'],
             keywords=['disttask', 'multiprocessing', 'distributed', 'concurrent', 'execution', 'command', 'xargs', 'parallel', 'threading', 'pipes', 'task', 'management'],
             description=summary,
