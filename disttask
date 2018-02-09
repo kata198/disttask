@@ -309,10 +309,17 @@ class DistTask(object):
         '''
         self.argset.append(item)
 
-    def stopRunning(self):
+    def stopRunning(self, forceWriterStop=False):
         '''
             stopRunning - Stop executing "run" at next possible moment.
         '''
+        if forceWriterStop:
+            try:
+                # Normally this is called when run completes, but in some cases smashing control+c
+                #   can bleed through and prevent this from happening, so we double up on it
+                self.stdoutWriter.stopRunning()
+            except:
+                pass
         self.keepGoing = False
 
     def run(self):
@@ -341,29 +348,32 @@ class DistTask(object):
 
         collateOutput = self.collateOutput
 
-        while shouldKeepGoing():
-            pipesRunning = 0
-            for i in range(self.concurrent_tasks):
-                if pipes[i] is None:
-                    if len(argset) > 0:
-                        nextItem = argset.popleft()
-                        cmd = self.replaceItem(self.cmd, nextItem, i)
-                        pipes[i] = Runner(cmd, stdoutWriter, nextItem, collateOutput)
-                        pipes[i].start()
-                        pipesRunning += 1
-                else:
-                    if pipes[i].isAlive() is False:
+        try:
+            while shouldKeepGoing():
+                pipesRunning = 0
+                for i in range(self.concurrent_tasks):
+                    if pipes[i] is None:
                         if len(argset) > 0:
                             nextItem = argset.popleft()
                             cmd = self.replaceItem(self.cmd, nextItem, i)
-                            pipes[i].join() # cleanup
                             pipes[i] = Runner(cmd, stdoutWriter, nextItem, collateOutput)
                             pipes[i].start()
                             pipesRunning += 1
                     else:
-                        pipesRunning += 1
+                        if pipes[i].isAlive() is False:
+                            if len(argset) > 0:
+                                nextItem = argset.popleft()
+                                cmd = self.replaceItem(self.cmd, nextItem, i)
+                                pipes[i].join() # cleanup
+                                pipes[i] = Runner(cmd, stdoutWriter, nextItem, collateOutput)
+                                pipes[i].start()
+                                pipesRunning += 1
+                        else:
+                            pipesRunning += 1
 
-            time.sleep(.0002)
+                time.sleep(.0002)
+        except:
+            pass
 
         stdoutWriter.stopRunning()
 
@@ -443,22 +453,32 @@ if (__name__ == "__main__"):
 
         runner = DistTask(cmd, concurrent_tasks, [], stdoutWriter, endWhenDone=False, collateOutput=collateOutput)
         runnerThread = threading.Thread(target=runner.run)
+        runnerThread.daemon = True
         runnerThread.start()
 
         nextItem = None
-        while not sys.stdin.closed:
-            try:
-                nextItem = sys.stdin.readline()
-                if nextItem == '':
+        try:
+            while not sys.stdin.closed:
+                try:
+                    nextItem = sys.stdin.readline()
+                    if nextItem == '':
+                        break
+                except KeyboardInterrupt:
+                    raise
+                except:
                     break
-            except:
-                break
-            runner.addItemToArgset(nextItem[:-1])
+                runner.addItemToArgset(nextItem[:-1])
 
-        runner.stopRunning()
-        runnerThread.join()
+            runner.stopRunning()
+            runnerThread.join()
+        except KeyboardInterrupt:
+            runner.stopRunning(forceWriterStop=True)
+            #runnerThread.join()
     else:
         runner = DistTask(cmd, concurrent_tasks, argset, stdoutWriter, endWhenDone=True, collateOutput=collateOutput)
-        runner.run()
+        try:
+            runner.run()
+        except KeyboardInterrupt:
+            runner.stopRunning(forceWriterStop=True)
 
 # vim: set ts=4 sw=4 expandtab
