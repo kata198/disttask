@@ -1,3 +1,13 @@
+* 2.3.0 - Feb 09 2018
+- Handle KeyboardInterrupts better to ensure stoppage (control+c)
+- Catch SIGINT and SIGTERM and force immediate stop
+- Ensure when argset is -- and thus data is piped in that we can properly stop
+  * Ensure that thread launched in this case is a daemon thread
+
+- Add "forceStop" method to DistTask which will force an immediate stop
+- Add (default False) argument to DistTask.stopRunning which if set to True will also terminate the associated stdout-writing thread
+
+
 * 2.2.2 - Apr 25 2017
 - Fix a race condition on some tasks that print an empty string as output
 
