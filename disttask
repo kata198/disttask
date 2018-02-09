@@ -289,6 +289,10 @@ class DistTask(object):
         if self.endWhenDone is False:
             self.keepGoing = True
 
+        # stopNow - flag which is set when we should stop running new jobs
+        #               (set by forceStop method)
+        self.stopNow = False
+
         self.collateOutput = collateOutput
 
         # keepGoing is an attribute when end
@@ -313,6 +317,8 @@ class DistTask(object):
         '''
             stopRunning - Stop executing "run" at next possible moment.
         '''
+        self.keepGoing = False
+
         if forceWriterStop:
             try:
                 # Normally this is called when run completes, but in some cases smashing control+c
@@ -320,7 +326,20 @@ class DistTask(object):
                 self.stdoutWriter.stopRunning()
             except:
                 pass
+
+
+    def forceStop(self):
+        '''
+            forceStop - Force the workers to stop right away. Also stops the stdout writer
+        '''
         self.keepGoing = False
+        self.stopNow = True
+
+        try:
+            self.stdoutWriter.stopRunning()
+        except:
+            pass
+
 
     def run(self):
         '''
@@ -333,6 +352,9 @@ class DistTask(object):
                 The StdoutWriter will be terminated at the end of this method.
         '''
 
+        # Reset stopNow flag for this run
+        self.stopNow = False
+
         argset = self.argset
         for i in range(self.concurrent_tasks):
             pipes.append(None)
@@ -342,9 +364,9 @@ class DistTask(object):
         stdoutWriter = self.stdoutWriter
 
         if self.endWhenDone is True:
-            shouldKeepGoing = lambda : bool(pipesRunning != 0)
+            shouldKeepGoing = lambda : self.stopNow is False and bool(pipesRunning != 0)
         else:
-            shouldKeepGoing = lambda : bool(self.keepGoing is True or (len(self.argset) > 0 or pipesRunning > 0))
+            shouldKeepGoing = lambda : self.stopNow is False and bool(self.keepGoing is True or (len(self.argset) > 0 or pipesRunning > 0))
 
         collateOutput = self.collateOutput
 
@@ -449,11 +471,19 @@ if (__name__ == "__main__"):
         stdoutWriter.setFlushEvery(10)
     stdoutWriter.start()
 
+    # Trap SIGTERM and SIGINT signals to do a clean terminate
+    global runner
+    def handleStopSignal(*args, **kwargs):
+        global runner
+        runner.forceStop()
+
     if len(argset) == 1 and argset[0] == '--':
 
         runner = DistTask(cmd, concurrent_tasks, [], stdoutWriter, endWhenDone=False, collateOutput=collateOutput)
         runnerThread = threading.Thread(target=runner.run)
         runnerThread.daemon = True
+        signal.signal(signal.SIGTERM, handleStopSignal)
+        signal.signal(signal.SIGINT, handleStopSignal)
         runnerThread.start()
 
         nextItem = None
@@ -472,13 +502,15 @@ if (__name__ == "__main__"):
             runner.stopRunning()
             runnerThread.join()
         except KeyboardInterrupt:
-            runner.stopRunning(forceWriterStop=True)
+            runner.forceStop()
             #runnerThread.join()
     else:
         runner = DistTask(cmd, concurrent_tasks, argset, stdoutWriter, endWhenDone=True, collateOutput=collateOutput)
+        signal.signal(signal.SIGTERM, handleStopSignal)
+        signal.signal(signal.SIGINT, handleStopSignal)
         try:
             runner.run()
         except KeyboardInterrupt:
-            runner.stopRunning(forceWriterStop=True)
+            runner.forceStop()
 
 # vim: set ts=4 sw=4 expandtab
