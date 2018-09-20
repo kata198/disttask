@@ -1,3 +1,7 @@
+* 2.4.0 - Sep 20 2018
+- Make SIGTERM actually terminate the subprocesses in all conditions, previously 2.3.0 could cause hangs if SIGTERM was sent in some conditions. Control+C worked before but has also been updated to work the same way
+- Fix an issue if you tried to import and use Disttask as a module (not supported out of the box but it was designed so you could rename it with a .py suffix and use it as a module.) This support has been re-added, but since it is a hack-if-you-need-it kind of thing, no stable interface is currently supported.
+
 * 2.3.0 - Feb 09 2018
 - Handle KeyboardInterrupts better to ensure stoppage (control+c)
 - Catch SIGINT and SIGTERM and force immediate stop
