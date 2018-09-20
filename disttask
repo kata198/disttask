@@ -276,7 +276,7 @@ class Runner(threading.Thread):
                     self.stdoutWriter.addData('[%s] %s' %(thisItem, line))
 
         pipeStdout = pipe.stdout
-        i = 0
+
         while self.keepGoing is True and (not pipeStdout.closed or pipe.poll() is not None):
             try:
                 (rlist, wlist, errors) = select.select([pipeStdout], [], [pipeStdout], .004)
@@ -298,7 +298,7 @@ class Runner(threading.Thread):
 
                 handleLine(line)
             except Exception as e:
-                keepGoing = False
+                self.keepGoing = False
                 pipe.terminate()
                 sys.stderr.write('Got exception: %s\n' %(str(e),))
                 break
