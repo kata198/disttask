@@ -201,9 +201,65 @@ class Runner(threading.Thread):
         self.collateOutput = collateOutput
 
         self.keepGoing = True
+        self.pipe = None
+
+
+    def stopRunning(self):
+        '''
+            stopRunning - Call to send SIGTERM to subprocess, set the thread to terminate,
+                and clean up when the subprocess has returned.
+
+        '''
+        self.keepGoing = False
+        if self.pipe:
+            try:
+                self.pipe.terminate()
+            except:
+                try:
+                    os.kill(self.pipe.pid, signal.SIGTERM)
+                except:
+                    pass
+            time.sleep(.05)
+            # This is probably overkill because it will happen in run
+            #   as well, but overkill is better than underkill...
+            try:
+                if self.pipe.poll() is not None:
+                    self.pipe.wait()
+            except:
+                pass
+
+    def forceStop(self):
+        '''
+            forceStop - Call to send SIGKILL to subprocess, set the thread to terminate,
+                and clean up ASAP.
+        '''
+        self.keepGoing = False
+        if self.pipe:
+            try:
+                self.pipe.kill()
+            except:
+                try:
+                    os.kill(self.pipe.pid, signal.SIGKILL)
+                except:
+                    pass
+            time.sleep(.02)
+            # This is probably overkill because it will happen in run
+            #   as well, but overkill is better than underkill...
+            try:
+                if self.pipe.poll() is not None:
+                    self.pipe.wait()
+            except:
+                pass
+
 
     def run(self):
-        pipe = subprocess.Popen(self.cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        '''
+            run - The method called when this thread is started
+        '''
+        self.keepGoing = True
+        self.pipe = None
+
+        self.pipe = pipe = subprocess.Popen(self.cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
         if self.collateOutput is True:
             output = []
             def handleLine(line):
@@ -247,12 +303,15 @@ class Runner(threading.Thread):
                 sys.stderr.write('Got exception: %s\n' %(str(e),))
                 break
         pipe.wait()
+        self.pipe = None
+
         if self.collateOutput is True:
             try:
                 self.stdoutWriter.addData(''.join(output))
             except:
                 for item in output:
                     self.stdoutWriter.addData(item)
+        
 
 class DistTask(object):
     '''
@@ -285,6 +344,8 @@ class DistTask(object):
         self.argset = deque(argset)
         self.stdoutWriter = stdoutWriter
         self.endWhenDone = endWhenDone
+
+        self.runners = None
 
         if self.endWhenDone is False:
             self.keepGoing = True
@@ -352,12 +413,21 @@ class DistTask(object):
                 The StdoutWriter will be terminated at the end of this method.
         '''
 
+        # runners should be a global variable set in main
+
+        if self.runners is None:
+            self.runners = []
+        else:
+            self.runners.clear()
+        runners = self.runners
+
+
         # Reset stopNow flag for this run
         self.stopNow = False
 
         argset = self.argset
         for i in range(self.concurrent_tasks):
-            pipes.append(None)
+            runners.append(None)
 
         pipesRunning = -1
 
@@ -374,21 +444,21 @@ class DistTask(object):
             while shouldKeepGoing():
                 pipesRunning = 0
                 for i in range(self.concurrent_tasks):
-                    if pipes[i] is None:
+                    if runners[i] is None:
                         if len(argset) > 0:
                             nextItem = argset.popleft()
                             cmd = self.replaceItem(self.cmd, nextItem, i)
-                            pipes[i] = Runner(cmd, stdoutWriter, nextItem, collateOutput)
-                            pipes[i].start()
+                            runners[i] = Runner(cmd, stdoutWriter, nextItem, collateOutput)
+                            runners[i].start()
                             pipesRunning += 1
                     else:
-                        if pipes[i].isAlive() is False:
+                        if runners[i].isAlive() is False:
                             if len(argset) > 0:
                                 nextItem = argset.popleft()
                                 cmd = self.replaceItem(self.cmd, nextItem, i)
-                                pipes[i].join() # cleanup
-                                pipes[i] = Runner(cmd, stdoutWriter, nextItem, collateOutput)
-                                pipes[i].start()
+                                runners[i].join() # cleanup
+                                runners[i] = Runner(cmd, stdoutWriter, nextItem, collateOutput)
+                                runners[i].start()
                                 pipesRunning += 1
                         else:
                             pipesRunning += 1
@@ -397,7 +467,49 @@ class DistTask(object):
         except:
             pass
 
+        # Cleanup all the Runners and ensure they are stopped
+        self.stopRunners(runners, forceStop=True)
+        
         stdoutWriter.stopRunning()
+
+    def stopRunners(self, runners=None, forceStop=None):
+        '''
+            stopRunners - Tell all the Runner(s) to stop running.
+                
+                @param runners <None/list<Runner>> Default None - If None will use self.runners,
+                    otherwise will use passed list of Runner objects
+
+                @param forceStop <None/bool> Default None - If None, will inherit self.stopNow
+                    otherwise if False will just call stopRunning on the runners (SIGTERM) and wait,
+                    if True will call stopRunning, wait 1 second, and then call stopNow (SIGKILL)
+        '''
+ 
+        if runners is None:
+            runners = self.runners
+
+        if forceStop is None:
+            forceStop = self.stopNow
+
+        for runner in runners:
+            if runner:
+                try:
+                    runner.stopRunning()
+                except:
+                    pass
+        
+        if forceStop == False:
+            return
+
+        if len([x for x in runners if x]):
+            time.sleep(1)
+
+        for runner in runners:
+            if runner:
+                try:
+                    runner.forceStop()
+                except:
+                    pass
+
 
 if (__name__ == "__main__"):
     args = sys.argv[1:]
@@ -446,9 +558,6 @@ if (__name__ == "__main__"):
         sys.exit(1)
 
 
-    pipes = []
-
-
     cmd = args.pop(0)
 
     concurrent_tasks = args.pop(0)
@@ -481,7 +590,7 @@ if (__name__ == "__main__"):
 
         runner = DistTask(cmd, concurrent_tasks, [], stdoutWriter, endWhenDone=False, collateOutput=collateOutput)
         runnerThread = threading.Thread(target=runner.run)
-        runnerThread.daemon = True
+        #runnerThread.daemon = False
         signal.signal(signal.SIGTERM, handleStopSignal)
         signal.signal(signal.SIGINT, handleStopSignal)
         runnerThread.start()
